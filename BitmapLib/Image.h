@@ -185,8 +185,8 @@ namespace ImageSpace
 		//»÷ÖÐ»÷²»ÖÐÏ¸»¯
 		bool ImgThinning();
 
-
-
+		//µÝ¹éË«±ßÂË²¨
+		bool Recursive_bilateral_filtering(float sigma_spatial = 0.03, float sigma_range = 0.1, float * buffer = 0);
 
 	};
 
