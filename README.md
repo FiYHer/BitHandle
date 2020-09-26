@@ -1,8 +1,7 @@
-
-一系列位图处理函数集合
+## 项目简介
+C++实现位图处理库
 
 ## 实现功能
-* **傅里叶变换** 
 * **平移** 
 * **缩放** 
 * **镜像** 
@@ -15,7 +14,10 @@
 * **膨胀** 
 * **.......** 
 
-## 就像...
+## 项目后续
+支持Png/Jpg等常用图片格式
+
+## 效果截图
 <h1 align="center">
 	<img src="1.png" alt="">
 	<img src="2.png" alt="">
@@ -25,5 +27,8 @@
 	<br>
 </h1>
 
-<details>
-<summary>Features in depth</summary>
+[1](https://i.ibb.co/RPmXZJc/5.png)
+
+[2](https://i.ibb.co/DG7SG1R/3.png)
+
+[3](https://i.ibb.co/P1N8hXD/2.png)
