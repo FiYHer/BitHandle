@@ -1,19 +1,11 @@
 #include "Image.h"
 using namespace ImageSpace;
 
-Image::Image(){}
+Image::Image() {}
 
-Image::Image(BitmapStruct& cImage)
-{
-	m_cImage.Release();
-	m_cImage = cImage;
-}
+Image::Image(BitmapStruct& cImage) { m_cImage = cImage; }
 
-Image::Image(Image& cImage)
-{
-	m_cImage.Release();
-	m_cImage = cImage.m_cImage;
-}
+Image::Image(Image& cImage) { m_cImage = cImage.m_cImage; }
 
 Image& Image::operator=(Image& cImage)
 {
@@ -27,18 +19,18 @@ Image& Image::operator=(BitmapStruct& cImage)
 	return *this;
 }
 
-Image::~Image(){}
+Image::~Image() {}
 
 bool Image::ReadBitmap(const char* szBitmapPath)
 {
 	///打开位图文件
 	HANDLE hFile = CreateFileA(szBitmapPath, GENERIC_READ,
 		FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
-	if (hFile == INVALID_HANDLE_VALUE)return false;
+	if (hFile == INVALID_HANDLE_VALUE) return false;
 
 	///获取位图文件的大小
-	int nBitmapSize = GetFileSize(hFile, NULL);
-	if (!nBitmapSize)
+	DWORD nBitmapSize = GetFileSize(hFile, NULL);
+	if (nBitmapSize == 0)
 	{
 		CloseHandle(hFile);
 		return false;
@@ -50,8 +42,8 @@ bool Image::ReadBitmap(const char* szBitmapPath)
 
 	///读取位图数据
 	DWORD dwRead = 0;
-	ReadFile(hFile, m_cImage.m_pImage, nBitmapSize, &dwRead, NULL);
-	if (!dwRead)
+	BOOL State = ReadFile(hFile, m_cImage.m_pImage, nBitmapSize, &dwRead, NULL);
+	if (State == FALSE || dwRead == 0)
 	{
 		CloseHandle(hFile);
 		return false;
@@ -78,8 +70,8 @@ bool Image::WriteBitmap(const char* szBitmapPath)
 
 	///将位图数据写入文件
 	DWORD dwWrite = 0;
-	WriteFile(hFile, m_cImage.m_pImage, nBitmapSize, &dwWrite, NULL);
-	if (!dwWrite)
+	BOOL State = WriteFile(hFile, m_cImage.m_pImage, nBitmapSize, &dwWrite, NULL);
+	if (State == FALSE || dwWrite == 0)
 	{
 		CloseHandle(hFile);
 		return false;
@@ -104,11 +96,11 @@ HPALETTE Image::CreateBitmapPalete()
 	case 4:nColorTableLen = 16; break;
 	case 8:nColorTableLen = 256; break;
 	}
-	if (!nColorTableLen) return NULL;
+	if (nColorTableLen == 0) return NULL;
 
 	///申请调色板内存
 	LPLOGPALETTE pLogPalete = (LPLOGPALETTE)VirtualAlloc(NULL, nColorTableLen, PAGE_READWRITE, MEM_COMMIT);
-	if (!pLogPalete)return NULL;
+	if (pLogPalete == NULL) return NULL;
 
 	///调色板填充
 	pLogPalete->palVersion = 0x300;
@@ -196,7 +188,7 @@ bool Image::ToGray()
 	cDestImage.m_pFileHeader->bfOffBits = (nColorTable * sizeof(RGBQUAD));
 	cDestImage.m_pFileHeader->bfOffBits += sizeof(BITMAPFILEHEADER);
 	cDestImage.m_pFileHeader->bfOffBits += sizeof(BITMAPINFOHEADER);
-	
+
 	//更新像素大小
 	cDestImage.m_pInfoHeader->biBitCount = nDestPiexlByte;
 
@@ -265,7 +257,7 @@ bool Image::ColorEnhancement(int nThreshold)
 		{
 			for (int n = 0; n < nSrcPiexlByte; n++)
 			{
-				if (m_cImage.m_pBuffer[i * nSrcLineByte + j * nSrcPiexlByte + n] < nThreshold) 
+				if (m_cImage.m_pBuffer[i * nSrcLineByte + j * nSrcPiexlByte + n] < nThreshold)
 					m_cImage.m_pBuffer[i * nSrcLineByte + j * nSrcPiexlByte + n] = 255;
 				else
 					m_cImage.m_pBuffer[i * nSrcLineByte + j * nSrcPiexlByte + n] = 0;
@@ -490,7 +482,7 @@ bool Image::ToScale(float fMultipleX, float fMultipleY)
 	{
 		//获取调色板大小
 		int nSize = m_cImage.m_pFileHeader->bfOffBits;
-		nSize -= sizeof(BITMAPFILEHEADER)+ sizeof(BITMAPINFOHEADER);
+		nSize -= sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
 
 		//复制调色板数据
 		CopyMemory(cDestImage.m_pRgbQuad, m_cImage.m_pRgbQuad, nSize);
@@ -752,7 +744,6 @@ bool Image::Rotate(float fAngle, int nColor /*= 255*/)
 	{
 		for (int j = 0; j < nDestWidth; j++)
 		{
-
 			//获取临近插值
 			int nCorrdinateX = static_cast<int>(j * fCos - i * fSin + fConstData1 + 0.5f);
 			int nCoordinateY = static_cast<int>(j * fSin + i * fCos + fConstData2 + 0.5f);
@@ -975,7 +966,6 @@ bool Image::GradeSharp(int nThresh)
 				if (nTemp >= nThresh)
 				{
 					m_cImage.m_pBuffer[(nSrcHeight - 1 - i)*nSrcLineByte + j] = nTemp + 120;
-
 				}
 			}
 			else
@@ -1069,7 +1059,6 @@ bool Image::LinearStrech(int nPosX1, int nPosY1, int nPosX2, int nPosY2)
 				m_cImage.m_pBuffer[i*nLineByte + j] = nMap[cIndex];
 			}
 		}
-
 	}
 	else if (nSrcPiexlByte == 3)//三通道
 	{
@@ -1080,7 +1069,7 @@ bool Image::LinearStrech(int nPosX1, int nPosY1, int nPosX2, int nPosY2)
 				for (int n = 0; n < nSrcPiexlByte; n++)
 				{
 					char cIndex = m_cImage.m_pBuffer[i*nSrcLineByte + j * nSrcPiexlByte + n];
-					m_cImage.m_pBuffer[i*nSrcLineByte + j*nSrcPiexlByte +n] = nMap[cIndex];
+					m_cImage.m_pBuffer[i*nSrcLineByte + j * nSrcPiexlByte + n] = nMap[cIndex];
 				}
 			}
 		}
@@ -1108,7 +1097,7 @@ bool Image::Roberts()
 			for (int n = 0; n < nSrcPiexlByte; n++)
 			{
 				//X方向的梯度
-				int nDirectX = m_cImage.m_pBuffer[i*nSrcLineByte + j * nSrcPiexlByte + n] 
+				int nDirectX = m_cImage.m_pBuffer[i*nSrcLineByte + j * nSrcPiexlByte + n]
 					- m_cImage.m_pBuffer[(i + 1)*nSrcLineByte + j * nSrcPiexlByte + n];
 
 				//Y方向的梯度
@@ -1485,12 +1474,12 @@ bool Image::AdaptThreshSeg()
 	return true;
 }
 
-bool Image::MeanTemplateSmooth(int nTemplateWidth,	
-	int nTemplateHeight,					
+bool Image::MeanTemplateSmooth(int nTemplateWidth,
+	int nTemplateHeight,
 	double *pTemplate,
-	int nIgnoreX ,						
-	int nIgnoreY ,						
-	double dCoef )
+	int nIgnoreX,
+	int nIgnoreY,
+	double dCoef)
 {
 	//获取源位图的像素位
 	int nSrcPiexlByte = m_cImage.m_pInfoHeader->biBitCount / 8;
@@ -1545,9 +1534,8 @@ bool Image::MeanTemplateSmooth(int nTemplateWidth,
 	for (int i = nIgnoreY; i < nSrcHeight - nTemplateHeight + nIgnoreY + 1; i++)
 	{
 		//去掉边缘多少列
-		for (int j = nIgnoreX; j < nSrcWidth - nTemplateWidth  + nIgnoreX + 1; j++)
+		for (int j = nIgnoreX; j < nSrcWidth - nTemplateWidth + nIgnoreX + 1; j++)
 		{
-
 			double dValue = 0;
 			for (int n = 0; n < nTemplateHeight; n++)
 			{
@@ -1574,8 +1562,8 @@ bool Image::MeanTemplateSmooth(int nTemplateWidth,
 
 bool Image::MedianFilter(int nTemplateWidth,
 	int nTemplateHeight,
-	int nIgnoreX ,
-	int nIgnoreY ) 
+	int nIgnoreX,
+	int nIgnoreY)
 {
 	//获取源位图的像素位
 	int nSrcPiexlByte = m_cImage.m_pInfoHeader->biBitCount / 8;
@@ -1728,7 +1716,7 @@ bool Image::MaskSmooth()
 			nValue[6] = m_cImage.m_pBuffer[(j + 1)*nSrcLineByte + (i - 1)];
 			nValue[7] = m_cImage.m_pBuffer[(j + 1)*nSrcLineByte + i];
 			nValue[8] = m_cImage.m_pBuffer[(j + 1)*nSrcLineByte + (i + 1)];
-			dAvg[0] = static_cast<double>(nValue[0] + nValue[1] + nValue[2] 
+			dAvg[0] = static_cast<double>(nValue[0] + nValue[1] + nValue[2]
 				+ nValue[3] + nValue[4] + nValue[5] + nValue[6] + nValue[7] + nValue[8]) / 9;
 			for (int n = 0; n <= 8; n++)
 				dSum[0] += nValue[n] * nValue[n] - dAvg[0] * dAvg[0];
@@ -1741,7 +1729,7 @@ bool Image::MaskSmooth()
 			nValue[4] = m_cImage.m_pBuffer[(j - 1)*nSrcLineByte + i];
 			nValue[5] = m_cImage.m_pBuffer[(j - 1)*nSrcLineByte + (i + 1)];
 			nValue[6] = m_cImage.m_pBuffer[j*nSrcLineByte + i];
-			dAvg[1] = static_cast<double>(nValue[0] + nValue[1] + nValue[2] 
+			dAvg[1] = static_cast<double>(nValue[0] + nValue[1] + nValue[2]
 				+ nValue[3] + nValue[4] + nValue[5] + nValue[6]) / 7;
 			for (int n = 0; n <= 6; n++)
 				dSum[1] += nValue[n] * nValue[n] - dAvg[1] * dAvg[1];
@@ -1793,7 +1781,7 @@ bool Image::MaskSmooth()
 			nValue[4] = m_cImage.m_pBuffer[(j - 1)*nSrcLineByte + (i + 2)];
 			nValue[5] = m_cImage.m_pBuffer[j*nSrcLineByte + i];
 			nValue[6] = m_cImage.m_pBuffer[j*nSrcLineByte + (i + 1)];
-			dAvg[5] = static_cast<double>(nValue[0] + nValue[1] + nValue[2] 
+			dAvg[5] = static_cast<double>(nValue[0] + nValue[1] + nValue[2]
 				+ nValue[3] + nValue[4] + nValue[5] + nValue[6]) / 7;
 			for (int n = 0; n <= 6; n++)
 				dSum[5] += nValue[n] * nValue[n] - dAvg[5] * dAvg[5];
@@ -1819,7 +1807,7 @@ bool Image::MaskSmooth()
 			nValue[4] = m_cImage.m_pBuffer[(j + 1)*nSrcLineByte + i];
 			nValue[5] = m_cImage.m_pBuffer[(j + 2)*nSrcLineByte + (i - 2)];
 			nValue[6] = m_cImage.m_pBuffer[(j + 2)*nSrcLineByte + (i - 1)];
-			dAvg[7] = static_cast<double>(nValue[0] + nValue[1] + nValue[2] 
+			dAvg[7] = static_cast<double>(nValue[0] + nValue[1] + nValue[2]
 				+ nValue[3] + nValue[4] + nValue[5] + nValue[6]) / 7;
 			for (int n = 0; n <= 6; n++)
 				dSum[7] += nValue[n] * nValue[n] - dAvg[7] * dAvg[7];
@@ -1934,7 +1922,7 @@ bool Image::LapTemplate(int nTemplateWidth,
 	return true;
 }
 
-bool Image::Erosion(int nTemplateWidth, int nTemplateHeight,const int *pTemplate)
+bool Image::Erosion(int nTemplateWidth, int nTemplateHeight, const int *pTemplate)
 {
 	//获取源位图的像素位
 	int nSrcPiexlByte = m_cImage.m_pInfoHeader->biBitCount / 8;
@@ -1998,7 +1986,6 @@ bool Image::Erosion(int nTemplateWidth, int nTemplateHeight,const int *pTemplate
 				cDestImage.m_pBuffer[i*nSrcLineByte + j] = 255;
 			else
 				cDestImage.m_pBuffer[i*nSrcLineByte + j] = 0;
-
 		}
 	}
 
@@ -2057,7 +2044,7 @@ bool Image::Dilate(int nTemplateWidth, int nTemplateHeight, const int *pTemplate
 
 	//申请对称集空间
 	int* pTemplateMask = new int[nTemplateHeight*nTemplateWidth];
-	for (int i = 0; i < nTemplateHeight; i++) 
+	for (int i = 0; i < nTemplateHeight; i++)
 	{
 		for (int j = 0; j < nTemplateWidth; j++)
 		{
@@ -2095,7 +2082,6 @@ bool Image::Dilate(int nTemplateWidth, int nTemplateHeight, const int *pTemplate
 				cDestImage.m_pBuffer[i*nSrcLineByte + j] = 255;
 			else
 				cDestImage.m_pBuffer[i*nSrcLineByte + j] = 0;
-
 		}
 	}
 
@@ -2551,3 +2537,7 @@ bool Image::Recursive_bilateral_filtering(float sigma_spatial, float sigma_range
 	return true;
 }
 
+void ImageSpace::Image::CopyTo(Image& cImage)
+{
+	m_cImage.CopyTo(cImage.m_cImage);
+}

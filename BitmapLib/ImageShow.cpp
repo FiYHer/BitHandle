@@ -1,12 +1,12 @@
 #include "ImageShow.h"
 using namespace ImageSpace;
 
-std::map<std::string, HWND> ImageShow::m_cWindowHwnd;
+std::vector<ShowHelp*> ImageShow::m_vWindowList;
 std::mutex ImageShow::m_cMutex;
 
-void ImageShow::GetMsgLoop()
+void ImageShow::MsgHandle()
 {
-	MSG stMsg;
+	MSG stMsg{ 0 };
 	while (GetMessageA(&stMsg, 0, 0, 0))
 	{
 		TranslateMessage(&stMsg);
@@ -16,49 +16,163 @@ void ImageShow::GetMsgLoop()
 
 LRESULT CALLBACK ImageShow::ImageDefProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+	//窗口的绘制
+	if (uMsg == WM_PAINT) ShowAll();
+
 	//窗口的销毁
 	if (uMsg == WM_CLOSE)
 	{
+		//锁定
 		m_cMutex.lock();
-		for (std::map<std::string,HWND>::iterator it = m_cWindowHwnd.begin(); 
-			it != m_cWindowHwnd.end(); it++)
+
+		for (auto it = m_vWindowList.begin(); it != m_vWindowList.end(); it++)
 		{
-			if (it->second == hWnd)
+			//句柄一样
+			if ((*it)->WindowHwnd == hWnd)
 			{
-				m_cWindowHwnd.erase(it);
+				(*it)->BmpData.Release();
+				DestroyWindow((*it)->WindowHwnd);
+				delete (*it);
+				m_vWindowList.erase(it);
 				break;
 			}
 		}
+
+		//如果是最后一个窗口了的话,直接结束程序
+		if (m_vWindowList.empty()) PostQuitMessage(0);
+
+		//解锁
 		m_cMutex.unlock();
+
+		return 1;
 	}
+
 	return DefWindowProcA(hWnd, uMsg, wParam, lParam);
 }
 
-void ImageShow::Create(const char* szWindowName)
+void ImageShow::PushWindow(std::string WindowName, BitmapStruct& cBitmap)
 {
-	WNDCLASSEXA stWndCls;
-	ZeroMemory(&stWndCls, sizeof(stWndCls));
+	//先参数判断
+	if (WindowName.empty() || cBitmap.Empty()) return;
+
+	//锁定
+	m_cMutex.lock();
+
+	//查找列表里面有没有这个窗口
+	for (auto& it : m_vWindowList)
+	{
+		//有这个窗口了,直接替换位图就OK
+		if ((*it).WindowName == WindowName)
+		{
+			cBitmap.CopyTo((*it).BmpData);
+			return;
+		}
+	}
+
+	//解锁
+	m_cMutex.unlock();
+
+	//创建一个窗口
+	WNDCLASSEXA stWndCls{ 0 };
 	stWndCls.cbSize = sizeof(WNDCLASSEXA);
 	stWndCls.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 	stWndCls.hInstance = GetModuleHandleA(NULL);
 	stWndCls.lpfnWndProc = ImageDefProc;
 	stWndCls.style = CS_HREDRAW | CS_VREDRAW;
-	stWndCls.lpszClassName = szWindowName;
+	stWndCls.lpszClassName = WindowName.c_str();
 	if (RegisterClassExA(&stWndCls))
 	{
-		HWND hWnd = CreateWindowA(szWindowName, szWindowName, WS_SYSMENU,
-			0, 0, 100, 100, NULL, NULL, stWndCls.hInstance, NULL);
+		HWND hWnd = CreateWindowA(WindowName.c_str(), WindowName.c_str(), WS_SYSMENU,
+			0, 0, 0, 0, NULL, NULL, stWndCls.hInstance, NULL);
 		if (hWnd)
 		{
-			m_cWindowHwnd.emplace(std::pair<std::string, HWND>(std::string(szWindowName), hWnd));
+			//锁定
+			m_cMutex.lock();
+
+			//加入列表
+			ShowHelp* Temp = new ShowHelp;
+			cBitmap.CopyTo(Temp->BmpData);
+			Temp->WindowName = WindowName;
+			Temp->WindowHwnd = hWnd;
+			m_vWindowList.push_back(std::move(Temp));
+
+			//解锁
+			m_cMutex.unlock();
+
 			ShowWindow(hWnd, SW_SHOW);
 			UpdateWindow(hWnd);
 		}
 	}
-
 }
 
-void ImageShow::Show(HWND& hWnd, HDC& hDc,const BitmapStruct& cBitmap)
+void ImageShow::PushWindow(std::string WindowName, ImageSpace::Image& cImage)
+{
+	PushWindow(WindowName, cImage.m_cImage);
+}
+
+void ImageShow::PopWindow(std::string WindowName)
+{
+	HWND Target = NULL;
+
+	//锁定
+	m_cMutex.lock();
+
+	//遍历窗口
+	for (auto it = m_vWindowList.begin(); it != m_vWindowList.end(); it++)
+	{
+		if ((*it)->WindowName == WindowName)
+		{
+			//拿到窗口的句柄
+			Target = (*it)->WindowHwnd;
+			break;
+		}
+	}
+
+	//解锁
+	m_cMutex.unlock();
+
+	//如果窗口句柄不为空,就发送结束窗口消息
+	if (Target) SendMessageA(Target, WM_CLOSE, 0, 0);
+}
+
+HPALETTE ImageShow::CreateBitPalette(const BitmapStruct& Bit)
+{
+	///获取颜色表长度
+	int nColorTableLen = 0;
+	switch (Bit.m_pInfoHeader->biBitCount)
+	{
+	case 1:nColorTableLen = 2; break;
+	case 4:nColorTableLen = 16; break;
+	case 8:nColorTableLen = 256; break;
+	}
+	if (nColorTableLen == 0) return NULL;
+
+	///申请调色板内存
+	LPLOGPALETTE pLogPalete = (LPLOGPALETTE)VirtualAlloc(NULL, nColorTableLen, PAGE_READWRITE, MEM_COMMIT);
+	if (pLogPalete == NULL) return NULL;
+
+	///调色板填充
+	pLogPalete->palVersion = 0x300;
+	pLogPalete->palNumEntries = nColorTableLen;
+	for (int i = 0; i < nColorTableLen; i++)
+	{
+		pLogPalete->palPalEntry[i].peBlue = Bit.m_pRgbQuad[i].rgbBlue;
+		pLogPalete->palPalEntry[i].peGreen = Bit.m_pRgbQuad[i].rgbGreen;
+		pLogPalete->palPalEntry[i].peRed = Bit.m_pRgbQuad[i].rgbRed;
+		pLogPalete->palPalEntry[i].peFlags = Bit.m_pRgbQuad[i].rgbReserved;
+	}
+
+	///创建调色板句柄
+	HPALETTE hPalete = CreatePalette(pLogPalete);
+
+	///释放内存
+	VirtualFree(pLogPalete, NULL, MEM_RELEASE);
+
+	///返回句柄
+	return hPalete;
+}
+
+void ImageShow::Show(HWND& hWnd, HDC& hDc, const BitmapStruct& cBitmap)
 {
 	//设置绘制模式位拉伸模式
 	SetStretchBltMode(hDc, HALFTONE);
@@ -77,50 +191,48 @@ void ImageShow::Show(HWND& hWnd, HDC& hDc,const BitmapStruct& cBitmap)
 		cBitmap.m_pBuffer, (LPBITMAPINFO)cBitmap.m_pInfoHeader, DIB_RGB_COLORS, SRCCOPY);
 }
 
-void ImageShow::Show(const char* szWindowName,const BitmapStruct& cBitmap)
+void ImageShow::ShowAll()
 {
-	//获取窗口句柄
-	HWND hWnd = m_cWindowHwnd.at(szWindowName);
+	//锁定
+	m_cMutex.lock();
 
-	//获取窗口的DC
-	HDC hDc = GetWindowDC(hWnd);
-	if (!hDc) return;
-
-	//显示图像
-	Show(hWnd, hDc, cBitmap);
-
-	//释放DC
-	ReleaseDC(hWnd, hDc);
-}
-
-void ImageShow::Show(const char* szWindowName, Image& cImage)
-{
-	//重载这个函数主要是为了显示非全彩图，使用调色板的情况下
-
-	//获取窗口句柄
-	HWND hWnd = m_cWindowHwnd.at(szWindowName);
-
-	//获取窗口的DC
-	HDC hDc = GetWindowDC(hWnd);
-	if (!hDc) return;
-
-	//调色板
-	HPALETTE hPalete = NULL;
-
-	//替换调色板
-	if (cImage.m_cImage.m_pRgbQuad)
+	//遍历每一个窗口
+	for (const auto& it : m_vWindowList)
 	{
-		hPalete = cImage.CreateBitmapPalete();
-		if (hPalete)
+		//获取窗口句柄
+		HWND hWnd = (*it).WindowHwnd;
+
+		//顶层窗口才绘制
+		if (hWnd == GetForegroundWindow())
 		{
-			SelectPalette(hDc, hPalete, TRUE);
-			RealizePalette(hDc);
+			//获取窗口的DC
+			HDC hDc = GetWindowDC(hWnd);
+			if (!hDc) continue;
+
+			//调色板
+			HPALETTE hPalete = NULL;
+
+			//替换调色板
+			if ((*it).BmpData.m_pRgbQuad)
+			{
+				hPalete = CreateBitPalette((*it).BmpData);
+				if (hPalete)
+				{
+					SelectPalette(hDc, hPalete, TRUE);
+					RealizePalette(hDc);
+				}
+			}
+
+			//显示图像
+			Show(hWnd, hDc, (*it).BmpData);
+
+			//释放DC
+			ReleaseDC(hWnd, hDc);
+
+			break;
 		}
 	}
 
-	//显示图像
-	Show(hWnd, hDc, cImage.m_cImage);
-
-	//释放DC
-	ReleaseDC(hWnd, hDc);
+	//解锁
+	m_cMutex.unlock();
 }
